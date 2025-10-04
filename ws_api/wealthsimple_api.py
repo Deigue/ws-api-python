@@ -151,6 +151,8 @@ class WealthsimpleAPIBase:
                 'x-ws-profile': 'invest'
             }
             response = self.send_post(f"{self.OAUTH_BASE_URL}/token", data, headers)
+            if not 'access_token' in response or not 'refresh_token' in response:
+                raise ManualLoginRequired(f"OAuth token invalid and cannot be refreshed: {response['error'] if 'error' in response else 'Invalid response from API'}")
             self.session.access_token = response['access_token']
             self.session.refresh_token = response['refresh_token']
             if persist_session_fct:
