@@ -350,6 +350,8 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             account['description'] = "Crypto"
         elif account['unifiedAccountType'] == 'SELF_DIRECTED_RRIF':
              account['description'] = f"RRIF: self-directed - {account['currency']}"
+        elif account['unifiedAccountType'] == 'CREDIT_CARD':
+             account['description'] = "Credit card"
         # TODO: Add other types as needed
 
     def get_account_balances(self, account_id):
@@ -550,6 +552,23 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
         elif act['type'] == 'REFERRAL' and act['subType'] is None:
             type_ = act['type'].capitalize()
             act['description'] = f"{type_}"
+
+        elif act['type'] == 'CREDIT_CARD' and act['subType'] == 'PURCHASE':
+            merchant = act['spendMerchant']
+            status = '(Pending) ' if act['status'] == 'authorized' else '' # Posted purchase transactions have status = settled
+            act['description'] = f"{status}Credit card purchase: {merchant}"
+
+        elif act['type'] == 'CREDIT_CARD' and act['subType'] == 'HOLD':
+            merchant = act['spendMerchant']
+            status = '(Pending) ' if act['status'] == 'authorized' else '' # Posted return transactions have subType = REFUND and status = settled
+            act['description'] = f"{status}Credit card refund: {merchant}"
+
+        elif act['type'] == 'CREDIT_CARD' and act['subType'] == 'REFUND':
+            merchant = act['spendMerchant']
+            act['description'] = f"Credit card refund: {merchant}"
+
+        elif act['type'] == 'CREDIT_CARD' and act['subType'] == 'PAYMENT':
+            act['description'] = "Credit card payment"
 
         # TODO: Add other types as needed
 
