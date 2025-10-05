@@ -472,6 +472,9 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                     f"{security} @ {float(act['amount']) / float(act['assetQuantity'])}"
                 )
 
+        elif act['type'] == 'CORPORATE_ACTION' and act['subType'] == 'SUBDIVISION':
+            act['description'] = f"Subdivision: Received {act['amount']} shares of {act['assetSymbol']}"
+
         elif act['type'] in ['DEPOSIT', 'WITHDRAWAL'] and act['subType'] in ['E_TRANSFER', 'E_TRANSFER_FUNDING']:
             direction = 'from' if act['type'] == 'DEPOSIT' else 'to'
             act['description'] = (
