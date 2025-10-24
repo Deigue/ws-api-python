@@ -156,7 +156,7 @@ class WealthsimpleAPIBase:
             self.session.access_token = response['access_token']
             self.session.refresh_token = response['refresh_token']
             if persist_session_fct:
-                if len(signature(persist_session_fct).parameters) == 3:
+                if len(signature(persist_session_fct).parameters) == 2:
                     persist_session_fct(self.session.to_json(), username)
                 else:
                     persist_session_fct(self.session.to_json())
@@ -206,7 +206,7 @@ class WealthsimpleAPIBase:
 
         # Persist the session if a persist function is provided
         if persist_session_fct:
-            if len(signature(persist_session_fct).parameters) == 3:
+            if len(signature(persist_session_fct).parameters) == 2:
                 persist_session_fct(self.session.to_json(), username)
             else:
                 persist_session_fct(self.session.to_json())
