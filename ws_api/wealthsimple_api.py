@@ -342,6 +342,8 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             account['description'] = f"TFSA: self-directed - {account['currency']}"
         elif account['unifiedAccountType'] == 'MANAGED_TFSA':
             account['description'] = f"TFSA: managed - {account['currency']}"
+        elif account['unifiedAccountType'] == 'SELF_DIRECTED_NON_REGISTERED':
+            account['description'] = "Non-registered: self-directed"
         elif account['unifiedAccountType'] == 'SELF_DIRECTED_JOINT_NON_REGISTERED':
             account['description'] = "Non-registered: self-directed - joint"
         elif account['unifiedAccountType'] == 'SELF_DIRECTED_NON_REGISTERED_MARGIN':
