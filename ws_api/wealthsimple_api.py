@@ -26,6 +26,7 @@ class WealthsimpleAPIBase:
         'FetchInstitutionalTransfer': "query FetchInstitutionalTransfer($id: ID!) {\n  accountTransfer(id: $id) {\n    ...InstitutionalTransfer\n    __typename\n  }\n}\n\nfragment InstitutionalTransfer on InstitutionalTransfer {\n  id\n  accountId: account_id\n  state\n  documentId: document_id\n  documentType: document_type\n  expectedCompletionDate: expected_completion_date\n  timelineExpectation: timeline_expectation {\n    lowerBound: lower_bound\n    upperBound: upper_bound\n    __typename\n  }\n  estimatedCompletionMaximum: estimated_completion_maximum\n  estimatedCompletionMinimum: estimated_completion_minimum\n  institutionName: institution_name\n  transferStatus: external_state\n  redactedInstitutionAccountNumber: redacted_institution_account_number\n  expectedValue: expected_value\n  transferType: transfer_type\n  cancellable\n  pdfUrl: pdf_url\n  clientVisibleState: client_visible_state\n  shortStatusDescription: short_status_description\n  longStatusDescription: long_status_description\n  progressPercentage: progress_percentage\n  type\n  rolloverType: rollover_type\n  autoSignatureEligible: auto_signature_eligible\n  parentInstitution: parent_institution {\n    id\n    name\n    __typename\n  }\n  stateHistories: state_histories {\n    id\n    state\n    notes\n    transitionSubmittedBy: transition_submitted_by\n    transitionedAt: transitioned_at\n    transitionCode: transition_code\n    __typename\n  }\n  transferFeeReimbursement: transfer_fee_reimbursement {\n    id\n    feeAmount: fee_amount\n    __typename\n  }\n  docusignSentViaEmail: docusign_sent_via_email\n  clientAccountType: client_account_type\n  primaryClientIdentityId: primary_client_identity_id\n  primaryOwnerSigned: primary_owner_signed\n  secondaryOwnerSigned: secondary_owner_signed\n  __typename\n}",
         'FetchAccountHistoricalFinancials': "query FetchAccountHistoricalFinancials($id: ID!, $currency: Currency!, $startDate: Date, $resolution: DateResolution!, $endDate: Date, $first: Int, $cursor: String) {\n          account(id: $id) {\n            id\n            financials {\n              historicalDaily(\n                currency: $currency\n                startDate: $startDate\n                resolution: $resolution\n                endDate: $endDate\n                first: $first\n                after: $cursor\n              ) {\n                edges {\n                  node {\n                    ...AccountHistoricalFinancials\n                    __typename\n                  }\n                  __typename\n                }\n                pageInfo {\n                  hasNextPage\n                  endCursor\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n            __typename\n          }\n        }\n\n        fragment AccountHistoricalFinancials on AccountHistoricalDailyFinancials {\n          date\n          netLiquidationValueV2 {\n            ...Money\n            __typename\n          }\n          netDepositsV2 {\n            ...Money\n            __typename\n          }\n          __typename\n        }\n\n        fragment Money on Money {\n          amount\n          cents\n          currency\n          __typename\n        }",
         'FetchIdentityHistoricalFinancials': "query FetchIdentityHistoricalFinancials($identityId: ID!, $currency: Currency!, $startDate: Date, $endDate: Date, $first: Int, $cursor: String, $accountIds: [ID!]) {\n      identity(id: $identityId) {\n        id\n        financials(filter: {accounts: $accountIds}) {\n          historicalDaily(\n            currency: $currency\n            startDate: $startDate\n            endDate: $endDate\n            first: $first\n            after: $cursor\n          ) {\n            edges {\n              node {\n                ...IdentityHistoricalFinancials\n                __typename\n              }\n              __typename\n            }\n            pageInfo {\n              hasNextPage\n              endCursor\n              __typename\n            }\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n    }\n\n    fragment IdentityHistoricalFinancials on IdentityHistoricalDailyFinancials {\n      date\n      netLiquidationValueV2 {\n        amount\n        currency\n        __typename\n      }\n      netDepositsV2 {\n        amount\n        currency\n        __typename\n      }\n      __typename\n    }",
+        'FetchCorporateActionChildActivities': "query FetchCorporateActionChildActivities($activityCanonicalId: String!) {\n  corporateActionChildActivities(\n    condition: {activityCanonicalId: $activityCanonicalId}\n  ) {\n    nodes {\n      ...CorporateActionChildActivity\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CorporateActionChildActivity on CorporateActionChildActivity {\n  canonicalId\n  activityCanonicalId\n  assetName\n  assetSymbol\n  assetType\n  entitlementType\n  quantity\n  currency\n  price\n  recordDate\n  __typename\n}",
     }
 
     def __init__(self, sess: Optional[WSAPISession] = None):
@@ -475,7 +476,15 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                 )
 
         elif act['type'] == 'CORPORATE_ACTION' and act['subType'] == 'SUBDIVISION':
-            act['description'] = f"Subdivision: Received {act['amount']} shares of {act['assetSymbol']}"
+            child_activities = self.get_corporate_action_child_activities(act['canonicalId'])
+            held_activity = next((activity for activity in child_activities if activity['entitlementType'] == 'HOLD'), None)
+            receive_activity = next((activity for activity in child_activities if activity['entitlementType'] == 'RECEIVE'), None)
+            if held_activity and receive_activity:
+                act['description'] = (
+                    f"Subdivision: {held_activity['quantity']} -> {receive_activity['quantity']} shares of {act['assetSymbol']}"
+                )
+            else:
+                act['description'] = f"Subdivision: Received {act['amount']} shares of {act['assetSymbol']}"
 
         elif act['type'] in ['DEPOSIT', 'WITHDRAWAL'] and act['subType'] in ['E_TRANSFER', 'E_TRANSFER_FUNDING']:
             direction = 'from' if act['type'] == 'DEPOSIT' else 'to'
@@ -647,5 +656,16 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                 'timerange': time_range,
             },
             'security.historicalQuotes',
+            'array',
+        )
+    
+    def get_corporate_action_child_activities(self, activity_canonical_id):
+        # Fetch details about a corporate action (eg. a split) using GraphQL query
+        return self.do_graphql_query(
+            'FetchCorporateActionChildActivities',
+            {
+                'activityCanonicalId': activity_canonical_id,
+            },
+            'corporateActionChildActivities.nodes',
             'array',
         )
