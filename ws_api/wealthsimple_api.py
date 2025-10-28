@@ -420,7 +420,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             'array',
         )
 
-    def get_activities(self, account_id, how_many=50, order_by='OCCURRED_AT_DESC', ignore_rejected=True, start_date = None, end_date = None):
+    def get_activities(self, account_id, how_many=50, order_by='OCCURRED_AT_DESC', ignore_rejected=True, start_date = None, end_date = None, load_all = False):
         # Calculate the end date for the condition
         end_date = (end_date if end_date else datetime.now() + timedelta(hours=23, minutes=59, seconds=59, milliseconds=999))
 
@@ -444,6 +444,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             'activityFeedItems.edges',
             'array',
             filter_fn = filter_fn,
+            load_all_pages = load_all,
         )
 
         for act in activities:
