@@ -214,7 +214,7 @@ class WealthsimpleAPIBase:
         return self.session
 
     def do_graphql_query(self, query_name: str, variables: dict, data_response_path: str, expect_type: str,
-                         filter_fn: callable = None, load_all_pages: bool = False):
+                         filter_fn: callable = None, *, load_all_pages: bool = False):
         query = {
             'operationName': query_name,
             'query': self.GRAPHQL_QUERIES[query_name],
@@ -246,8 +246,14 @@ class WealthsimpleAPIBase:
             if key not in data:
                 raise WSApiException(f"GraphQL query failed: {query_name}", response_data)
             data = data[key]
-            if hasattr(data, 'pageInfo') and hasattr(data.pageInfo, 'hasNextPage') and data.pageInfo.hasNextPage:
-                end_cursor = data.pageInfo.endCursor
+            if (
+                isinstance(data, dict)
+                and 'pageInfo' in data
+                and isinstance(data['pageInfo'], dict)
+                and data['pageInfo'].get('hasNextPage')
+                and 'endCursor' in data['pageInfo']
+            ):
+                end_cursor = data['pageInfo'].get('endCursor')
 
         # Ensure the data type matches the expected one (either array or object)
         if (expect_type == 'array' and not isinstance(data, list)) or (
@@ -266,8 +272,9 @@ class WealthsimpleAPIBase:
                 raise UnexpectedException("Can't load all pages for GraphQL queries that do not return arrays")
             if end_cursor:
                 variables['cursor'] = end_cursor
-                more_data = self.do_graphql_query(query_name, variables, data_response_path, expect_type, filter, True)
-                data += more_data
+                more_data = self.do_graphql_query(query_name, variables, data_response_path, expect_type, filter_fn, load_all_pages=True)
+                if isinstance(data, list) and isinstance(more_data, list):
+                    data += more_data
 
         return data
 
