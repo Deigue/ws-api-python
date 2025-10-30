@@ -488,8 +488,11 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             held_activity = next((activity for activity in child_activities if activity['entitlementType'] == 'HOLD'), None)
             receive_activity = next((activity for activity in child_activities if activity['entitlementType'] == 'RECEIVE'), None)
             if held_activity and receive_activity:
+                held_shares: float = float(held_activity['quantity'])
+                received_shares: float = float(receive_activity['quantity'])
+                total_shares: float = held_shares + received_shares
                 act['description'] = (
-                    f"Subdivision: {held_activity['quantity']} -> {receive_activity['quantity']} shares of {act['assetSymbol']}"
+                    f"Subdivision: {held_shares} -> {total_shares} shares of {act['assetSymbol']}"
                 )
             else:
                 act['description'] = f"Subdivision: Received {act['amount']} shares of {act['assetSymbol']}"
