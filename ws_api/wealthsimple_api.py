@@ -598,6 +598,10 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
         elif act['type'] == 'CREDIT_CARD' and act['subType'] == 'PAYMENT':
             act['description'] = "Credit card payment"
 
+        elif act['type'] == 'REIMBURSEMENT' and act['subType'] == 'CASHBACK':
+            program = "- Visa Infinite" if act['rewardProgram'] == 'CREDIT_CARD_VISA_INFINITE_REWARDS' else ''
+            act['description'] = f"Cash back {program}".rstrip()
+
         # TODO: Add other types as needed
 
     def security_id_to_symbol(self, security_id: str) -> str:
