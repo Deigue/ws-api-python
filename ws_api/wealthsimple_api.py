@@ -495,7 +495,8 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                     f"Subdivision: {held_shares} -> {total_shares} shares of {act['assetSymbol']}"
                 )
             else:
-                act['description'] = f"Subdivision: Received {act['amount']} shares of {act['assetSymbol']}"
+                received_shares: float = float(act['amount'])
+                act['description'] = f"Subdivision: Received {received_shares} new shares of {act['assetSymbol']}"
 
         elif act['type'] in ['DEPOSIT', 'WITHDRAWAL'] and act['subType'] in ['E_TRANSFER', 'E_TRANSFER_FUNDING']:
             direction = 'from' if act['type'] == 'DEPOSIT' else 'to'
