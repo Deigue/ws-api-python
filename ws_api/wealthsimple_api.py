@@ -594,7 +594,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             )
         elif act['type'] == 'INSTITUTIONAL_TRANSFER_INTENT' and act['subType'] == 'TRANSFER_OUT':
             act['description'] = (
-                f"Institutional transfer: transfer to {act['institutionName']} "
+                f"Institutional transfer: transfer to {act['institutionName']}"
             )
         elif act['type'] == 'INTEREST':
             if act['subType'] == 'FPL_INTEREST':
