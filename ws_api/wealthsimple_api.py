@@ -1,13 +1,20 @@
-from datetime import datetime, timedelta
-
 import re
-import requests
 import uuid
-from typing import Optional, Callable, Any
-
-from ws_api.exceptions import CurlException, LoginFailedException, ManualLoginRequired, OTPRequiredException, UnexpectedException, WSApiException
-from ws_api.session import WSAPISession
+from datetime import datetime, timedelta
 from inspect import signature
+from typing import Any, Callable, Optional
+
+import requests
+
+from ws_api.exceptions import (
+    CurlException,
+    LoginFailedException,
+    ManualLoginRequired,
+    OTPRequiredException,
+    UnexpectedException,
+    WSApiException,
+)
+from ws_api.session import WSAPISession
 
 
 class WealthsimpleAPIBase:
@@ -130,7 +137,7 @@ class WealthsimpleAPIBase:
         if not self.session.session_id:
             self.session.session_id = str(uuid.uuid4())
 
-    def check_oauth_token(self, persist_session_fct: Optional[Callable[[WSAPISession, Optional[str]], None]] = None, username = None):
+    def check_oauth_token(self, persist_session_fct: Optional[Callable] = None, username = None):
         if self.session.access_token:
             try:
                 # noinspection PyUnresolvedReferences
@@ -152,7 +159,7 @@ class WealthsimpleAPIBase:
                 'x-ws-profile': 'invest'
             }
             response = self.send_post(f"{self.OAUTH_BASE_URL}/token", data, headers)
-            if not 'access_token' in response or not 'refresh_token' in response:
+            if 'access_token' not in response or 'refresh_token' not in response:
                 raise ManualLoginRequired(f"OAuth token invalid and cannot be refreshed: {response['error'] if 'error' in response else 'Invalid response from API'}")
             self.session.access_token = response['access_token']
             self.session.refresh_token = response['refresh_token']
@@ -168,8 +175,13 @@ class WealthsimpleAPIBase:
     SCOPE_READ_ONLY = 'invest.read trade.read tax.read'
     SCOPE_READ_WRITE = 'invest.read trade.read tax.read invest.write trade.write tax.write'
 
-    def login_internal(self, username: str, password: str, otp_answer: str = None,
-                       persist_session_fct: callable = None, scope: str = SCOPE_READ_ONLY) -> WSAPISession:
+    def login_internal(self,
+        username: str,
+        password: str,
+        otp_answer: str | None = None,
+        persist_session_fct: Optional[Callable] = None,
+        scope: str = SCOPE_READ_ONLY
+    ) -> WSAPISession:
         data = {
             'grant_type': 'password',
             'username': username,
@@ -215,7 +227,7 @@ class WealthsimpleAPIBase:
         return self.session
 
     def do_graphql_query(self, query_name: str, variables: dict, data_response_path: str, expect_type: str,
-                         filter_fn: callable = None, *, load_all_pages: bool = False):
+                         filter_fn: Optional[Callable[[Any], bool]] = None, *, load_all_pages: bool = False):
         query = {
             'operationName': query_name,
             'query': self.GRAPHQL_QUERIES[query_name],
@@ -289,7 +301,29 @@ class WealthsimpleAPIBase:
         return self.session.token_info
 
     @staticmethod
-    def login(username: str, password: str, otp_answer: str = None, persist_session_fct: callable = None, scope: str = SCOPE_READ_ONLY):
+    def login(
+        username: str,
+        password: str,
+        otp_answer: str | None = None,
+        persist_session_fct: Optional[Callable] = None,
+        scope: str = SCOPE_READ_ONLY
+    ) -> WSAPISession:
+        """Login to Wealthsimple API and return a session object.
+
+        Args:
+            username (str): The username of the Wealthsimple account.
+            password (str): The password of the Wealthsimple account.
+            otp_answer (str, optional): The answer to the 2FA code. Defaults to None.
+            persist_session_fct (callable, optional): A function to call to persist the session. Defaults to None.
+            scope (str, optional): The OAuth scope for the session. Defaults to SCOPE_READ_ONLY.
+
+        Returns:
+            WSAPISession: The session object.
+
+        Raises:
+            LoginFailedException: If the login fails.
+            OTPRequiredException: If 2FA code is required.
+        """
         ws = WealthsimpleAPI()
         return ws.login_internal(username, password, otp_answer, persist_session_fct, scope)
 
@@ -420,7 +454,35 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             'array',
         )
 
-    def get_activities(self, account_id, how_many=50, order_by='OCCURRED_AT_DESC', ignore_rejected=True, start_date = None, end_date = None, load_all = False):
+    def get_activities(
+        self,
+        account_id: str | list[str],
+        how_many: int = 50,
+        order_by: str = 'OCCURRED_AT_DESC',
+        ignore_rejected: bool = True,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        load_all: bool = False
+    ) -> list[Any]:
+        """Retrieve activities for a specific account or list of accounts.
+
+        Args:
+            account_id (str | list[str]): The account ID or list of account IDs to retrieve activities for.
+            how_many (int): The maximum number of activities to retrieve.
+            order_by (str): The order in which to sort the activities.
+            ignore_rejected (bool): Whether to ignore rejected or cancelled activities.
+            start_date (datetime | None): The start date for filtering activities.
+            end_date (datetime | None): The end date for filtering activities.
+            load_all (bool): Whether to load all pages of activities.
+
+        Returns:
+            list[Any]: A list of activity objects.
+
+        Raises:
+            WSApiException: If the response format is unexpected.
+        """
+        if isinstance(account_id, str):
+            account_id = [account_id]
         # Calculate the end date for the condition
         end_date = (end_date if end_date else datetime.now() + timedelta(hours=23, minutes=59, seconds=59, milliseconds=999))
 
@@ -438,15 +500,17 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                 'condition': {
                     'startDate': start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ') if start_date else None,
                     'endDate': end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                    'accountIds': [account_id],
+                    'accountIds': account_id,
                 },
             },
             'activityFeedItems.edges',
             'array',
-            filter_fn = filter_fn,
-            load_all_pages = load_all,
+            filter_fn=filter_fn,
+            load_all_pages=load_all,
         )
 
+        if not isinstance(activities, list):
+            raise WSApiException(f"Unexpected response format: {self.get_activities.__name__}", activities)
         for act in activities:
             self._activity_add_description(act)
 
@@ -532,7 +596,10 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                 f"account transfer from {details['institutionName']} "
                 f"****{details['redactedInstitutionAccountNumber']}"
             )
-
+        elif act['type'] == 'INSTITUTIONAL_TRANSFER_INTENT' and act['subType'] == 'TRANSFER_OUT':
+            act['description'] = (
+                f"Institutional transfer: transfer to {act['institutionName']}"
+            )
         elif act['type'] == 'INTEREST':
             if act['subType'] == 'FPL_INTEREST':
                 act['description'] = "Stock Lending Earnings"
@@ -674,7 +741,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             'security.historicalQuotes',
             'array',
         )
-    
+
     def get_corporate_action_child_activities(self, activity_canonical_id):
         # Fetch details about a corporate action (eg. a split) using GraphQL query
         return self.do_graphql_query(
