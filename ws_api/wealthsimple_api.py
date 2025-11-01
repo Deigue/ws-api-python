@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import datetime, timedelta
 from inspect import signature
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 import requests
 
@@ -178,7 +178,7 @@ class WealthsimpleAPIBase:
     def login_internal(self,
         username: str,
         password: str,
-        otp_answer: str | None = None,
+        otp_answer: Optional[str] = None,
         persist_session_fct: Optional[Callable] = None,
         scope: str = SCOPE_READ_ONLY
     ) -> WSAPISession:
@@ -304,7 +304,7 @@ class WealthsimpleAPIBase:
     def login(
         username: str,
         password: str,
-        otp_answer: str | None = None,
+        otp_answer: Optional[str] = None,
         persist_session_fct: Optional[Callable] = None,
         scope: str = SCOPE_READ_ONLY
     ) -> WSAPISession:
@@ -456,12 +456,12 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
 
     def get_activities(
         self,
-        account_id: str | list[str],
+        account_id: Union[str, list[str]],
         how_many: int = 50,
         order_by: str = 'OCCURRED_AT_DESC',
         ignore_rejected: bool = True,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
         load_all: bool = False
     ) -> list[Any]:
         """Retrieve activities for a specific account or list of accounts.
@@ -471,8 +471,8 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             how_many (int): The maximum number of activities to retrieve.
             order_by (str): The order in which to sort the activities.
             ignore_rejected (bool): Whether to ignore rejected or cancelled activities.
-            start_date (datetime | None): The start date for filtering activities.
-            end_date (datetime | None): The end date for filtering activities.
+            start_date (datetime, optional): The start date for filtering activities.
+            end_date (datetime, optional): The end date for filtering activities.
             load_all (bool): Whether to load all pages of activities.
 
         Returns:
