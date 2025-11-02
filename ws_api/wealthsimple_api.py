@@ -486,11 +486,13 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
         # Calculate the end date for the condition
         end_date = (end_date if end_date else datetime.now() + timedelta(hours=23, minutes=59, seconds=59, milliseconds=999))
 
-        # Filter function to ignore rejected/cancelled activities
+        # Filter function to ignore rejected/cancelled/expired activities
         def filter_fn(activity):
             act_type = (activity.get('type', '') or '').upper()
             status = (activity.get('status', '') or '').lower()
-            return act_type != 'LEGACY_TRANSFER' and (not ignore_rejected or status == '' or ('rejected' not in status and 'cancelled' not in status))
+            excluded_statuses = {'rejected', 'cancelled', 'expired'}
+            is_excluded = any(s in status for s in excluded_statuses)
+            return act_type != 'LEGACY_TRANSFER' and (not ignore_rejected or status == '' or not is_excluded)
 
         activities = self.do_graphql_query(
             'FetchActivityFeedItems',
