@@ -564,6 +564,13 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
                 received_shares: float = float(act['amount'])
                 act['description'] = f"Subdivision: Received {received_shares} new shares of {act['assetSymbol']}"
 
+            if act["currency"] is None:
+                security = self.get_security_market_data(act["securityId"])
+                if security and isinstance(security, dict):
+                    fundamentals = security.get("fundamentals")
+                    if fundamentals and isinstance(fundamentals, dict):
+                        act["currency"] = fundamentals.get("currency")
+
         elif act['type'] in ['DEPOSIT', 'WITHDRAWAL'] and act['subType'] in ['E_TRANSFER', 'E_TRANSFER_FUNDING']:
             direction = 'from' if act['type'] == 'DEPOSIT' else 'to'
             act['description'] = (
