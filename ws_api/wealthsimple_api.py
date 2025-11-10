@@ -34,6 +34,7 @@ class WealthsimpleAPIBase:
         'FetchAccountHistoricalFinancials': "query FetchAccountHistoricalFinancials($id: ID!, $currency: Currency!, $startDate: Date, $resolution: DateResolution!, $endDate: Date, $first: Int, $cursor: String) {\n          account(id: $id) {\n            id\n            financials {\n              historicalDaily(\n                currency: $currency\n                startDate: $startDate\n                resolution: $resolution\n                endDate: $endDate\n                first: $first\n                after: $cursor\n              ) {\n                edges {\n                  node {\n                    ...AccountHistoricalFinancials\n                    __typename\n                  }\n                  __typename\n                }\n                pageInfo {\n                  hasNextPage\n                  endCursor\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n            __typename\n          }\n        }\n\n        fragment AccountHistoricalFinancials on AccountHistoricalDailyFinancials {\n          date\n          netLiquidationValueV2 {\n            ...Money\n            __typename\n          }\n          netDepositsV2 {\n            ...Money\n            __typename\n          }\n          __typename\n        }\n\n        fragment Money on Money {\n          amount\n          cents\n          currency\n          __typename\n        }",
         'FetchIdentityHistoricalFinancials': "query FetchIdentityHistoricalFinancials($identityId: ID!, $currency: Currency!, $startDate: Date, $endDate: Date, $first: Int, $cursor: String, $accountIds: [ID!]) {\n      identity(id: $identityId) {\n        id\n        financials(filter: {accounts: $accountIds}) {\n          historicalDaily(\n            currency: $currency\n            startDate: $startDate\n            endDate: $endDate\n            first: $first\n            after: $cursor\n          ) {\n            edges {\n              node {\n                ...IdentityHistoricalFinancials\n                __typename\n              }\n              __typename\n            }\n            pageInfo {\n              hasNextPage\n              endCursor\n              __typename\n            }\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n    }\n\n    fragment IdentityHistoricalFinancials on IdentityHistoricalDailyFinancials {\n      date\n      netLiquidationValueV2 {\n        amount\n        currency\n        __typename\n      }\n      netDepositsV2 {\n        amount\n        currency\n        __typename\n      }\n      __typename\n    }",
         'FetchCorporateActionChildActivities': "query FetchCorporateActionChildActivities($activityCanonicalId: String!) {\n  corporateActionChildActivities(\n    condition: {activityCanonicalId: $activityCanonicalId}\n  ) {\n    nodes {\n      ...CorporateActionChildActivity\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CorporateActionChildActivity on CorporateActionChildActivity {\n  canonicalId\n  activityCanonicalId\n  assetName\n  assetSymbol\n  assetType\n  entitlementType\n  quantity\n  currency\n  price\n  recordDate\n  __typename\n}",
+        'FetchBrokerageMonthlyStatementTransactions': "query FetchBrokerageMonthlyStatementTransactions($period: String!, $accountId: String!) {\n  brokerageMonthlyStatements(period: $period, accountId: $accountId) {\n    id\n    statementType\n    createdAt\n    data {\n      ... on BrokerageMonthlyStatementObject {\n        ...BrokerageMonthlyStatementObject\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment BrokerageMonthlyStatementObject on BrokerageMonthlyStatementObject {\n  custodianAccountId\n  activitiesPerCurrency {\n    currency\n    currentTransactions {\n      ...BrokerageMonthlyStatementTransactions\n      __typename\n    }\n    __typename\n  }\n  currentTransactions {\n    ...BrokerageMonthlyStatementTransactions\n    __typename\n  }\n  isMultiCurrency\n  __typename\n}\n\nfragment BrokerageMonthlyStatementTransactions on BrokerageMonthlyStatementTransactions {\n  balance\n  cashMovement\n  unit\n  description\n  transactionDate\n  transactionType\n  __typename\n}",
     }
 
     def __init__(self, sess: Optional[WSAPISession] = None):
@@ -761,3 +762,38 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
             'corporateActionChildActivities.nodes',
             'array',
         )
+
+    def get_statement_transactions(self, account_id: str, period: str) -> list[Any]:
+        """Retrieve transactions from account monthly statement.
+        
+        Args:
+            account_id (str): The account ID to retrieve transactions for.
+            period (str): The statement start date in 'YYYY-MM-DD' format.
+                For example, '2025-10-01' for October 2025 statement.
+
+        Returns:
+            list[Any]: A list of transactions.
+
+        Raises:
+            WSApiException: If the response format is unexpected.
+        """
+        statements = self.do_graphql_query(
+            'FetchBrokerageMonthlyStatementTransactions',
+            {
+                'accountId': account_id,
+                'period': period,
+            },
+            'brokerageMonthlyStatements',
+            'array',
+        )
+
+        if isinstance(statements, list) and len(statements) > 0:
+            statement = statements[0]
+            data = statement.get('data') if 'data' in statement else {}
+            transactions = data.get('currentTransactions') if 'currentTransactions' in data else []
+
+
+        if not isinstance(transactions, list):
+            raise WSApiException(f"Unexpected response format: {self.get_statement_transactions.__name__}", transactions)
+        
+        return transactions
