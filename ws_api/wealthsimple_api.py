@@ -90,7 +90,7 @@ class WealthsimpleAPIBase:
     def send_post(self, url: str, data: dict, headers: Optional[dict] = None, return_headers: bool = False) -> Any:
         return self.send_http_request(url, 'POST', data=data, headers=headers, return_headers=return_headers)
 
-    def start_session(self, sess: WSAPISession = None):
+    def start_session(self, sess: WSAPISession | None = None):
         if sess:
             self.session.access_token = sess.access_token
             self.session.wssdi = sess.wssdi
@@ -795,5 +795,5 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
 
         if not isinstance(transactions, list):
             raise WSApiException(f"Unexpected response format: {self.get_statement_transactions.__name__}", transactions)
-        
+
         return transactions

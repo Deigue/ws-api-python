@@ -165,6 +165,5 @@ cython_debug/
 # VS Code
 .vscode/
 
-# uv local dev dependencies
-uv.lock
-pyproject.toml
+# Dev dependencies
+ruff.toml
