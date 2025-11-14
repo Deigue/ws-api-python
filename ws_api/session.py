@@ -1,5 +1,5 @@
-from abc import ABC
 import json
+from abc import ABC
 
 
 class OAuthSession(ABC):
@@ -13,7 +13,7 @@ class OAuthSession(ABC):
     """
 
     def __init__(self):
-        self.client_id = None
+        self.client_id: str | None = None
         self.access_token = None
         self.refresh_token = None
 
@@ -31,8 +31,8 @@ class WSAPISession(OAuthSession):
 
     def __init__(self):
         super().__init__()
-        self.session_id = None
-        self.wssdi = None
+        self.session_id: str | None = None
+        self.wssdi: str | None = None
         self.token_info = None
 
     def to_json(self):

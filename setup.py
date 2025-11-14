@@ -10,6 +10,7 @@ setuptools.setup(
     author_email = 'guillaume@pommepause.com',
     url = 'https://github.com/gboudreau/ws-api-python',
     keywords = ['wealthsimple'],
+    python_requires='>=3.10',
     install_requires = [
         'requests',
     ],
@@ -19,5 +20,6 @@ setuptools.setup(
         'Operating System :: OS Independent',
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
         'Programming Language :: Python :: 3',
+        "Programming Language :: Python :: 3.13"
     ],
 )
