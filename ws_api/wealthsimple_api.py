@@ -51,6 +51,7 @@ class WealthsimpleAPIBase:
         data: dict | None = None,
         headers: dict | None = None,
         return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         headers = headers or {}
         if method == "POST":
@@ -73,6 +74,9 @@ class WealthsimpleAPIBase:
         try:
             response = requests.request(method, url, json=data, headers=headers)
 
+            if return_response:
+                return response
+
             if return_headers:
                 # Combine headers and body as a single string
                 response_headers = "\r\n".join(
@@ -85,10 +89,18 @@ class WealthsimpleAPIBase:
             raise CurlException(f"HTTP request failed: {e}")
 
     def send_get(
-        self, url: str, headers: dict | None = None, return_headers: bool = False
+        self,
+        url: str,
+        headers: dict | None = None,
+        return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         return self.send_http_request(
-            url, "GET", headers=headers, return_headers=return_headers
+            url,
+            "GET",
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
         )
 
     def send_post(
@@ -97,41 +109,61 @@ class WealthsimpleAPIBase:
         data: dict,
         headers: dict | None = None,
         return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         return self.send_http_request(
-            url, "POST", data=data, headers=headers, return_headers=return_headers
+            url,
+            "POST",
+            data=data,
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
         )
 
-    def start_session(self, sess: WSAPISession | None = None):
-        if sess:
-            self.session.access_token = sess.access_token
-            self.session.wssdi = sess.wssdi
-            self.session.session_id = sess.session_id
-            self.session.client_id = sess.client_id
-            self.session.refresh_token = sess.refresh_token
-            return
+    def _bootstrap_device_id_and_client(self) -> None:
+        """Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
+        and client_id.
 
+        Uses send_http_request (with return_response) so that configured user_agent
+        is applied and network errors are consistently wrapped as CurlException.
+        Prefers the requests cookie jar (which correctly handles multiple Set-Cookie
+        headers) with a narrow fallback to the old parsing logic for unusual
+        environments.
+        """
         app_js_url = None
 
         if not self.session.wssdi or not self.session.client_id:
-            # Fetch login page
-            response = self.send_get(
-                "https://my.wealthsimple.com/app/login", return_headers=True
+            # Fetch the login page via the wrapper for consistent headers + error handling.
+            resp = self.send_http_request(
+                "https://my.wealthsimple.com/app/login", method="GET", return_response=True
             )
 
-            for line in response.splitlines():
-                # Look for wssdi in set-cookie headers
-                if not self.session.wssdi and "set-cookie:" in line.lower():
-                    match = re.search(r"wssdi=([a-f0-9-]+);", line, re.IGNORECASE)
-                    if match:
-                        self.session.wssdi = match.group(1)
+            # Preferred path: cookie jar (handles duplicates, path, domain, etc.)
+            if not self.session.wssdi and "wssdi" in resp.cookies:
+                self.session.wssdi = resp.cookies["wssdi"]
 
-                if not app_js_url and "<script" in line.lower():
-                    match = re.search(
-                        r'<script.*src="(.+/app-[a-f0-9]+\.js)', line, re.IGNORECASE
-                    )
-                    if match:
-                        app_js_url = match.group(1)
+            # Fallback: parse the raw Set-Cookie header string (last resort).
+            if not self.session.wssdi:
+                raw_headers = "\r\n".join(f"{k}: {v}" for k, v in resp.headers.items())
+                for line in raw_headers.splitlines():
+                    if "set-cookie:" in line.lower():
+                        match = re.search(r"wssdi=([a-f0-9-]+);", line, re.IGNORECASE)
+                        if match:
+                            self.session.wssdi = match.group(1)
+                            break
+
+            # Locate the main application bundle URL from the HTML.
+            if not app_js_url:
+                for line in resp.text.splitlines():
+                    if "<script" in line.lower():
+                        match = re.search(
+                            r'<script.*src="(.+/app-[a-f0-9]+\.js)',
+                            line,
+                            re.IGNORECASE,
+                        )
+                        if match:
+                            app_js_url = match.group(1)
+                            break
 
             if not self.session.wssdi:
                 raise UnexpectedException(
@@ -144,18 +176,32 @@ class WealthsimpleAPIBase:
                     "Couldn't find app JS URL in login page response body."
                 )
 
-            # Fetch the app JS file
-            response = self.send_get(app_js_url, return_headers=True)
+            # Fetch the JS bundle to extract the production clientId.
+            js_resp = self.send_http_request(
+                app_js_url, method="GET", return_response=True
+            )
 
-            # Look for clientId in the app JS file
             match = re.search(
-                r'"production"[^}]*clientId:"([a-f0-9]+)"', response, re.IGNORECASE
+                r'"production"[^}]*clientId:"([a-f0-9]+)"',
+                js_resp.text,
+                re.IGNORECASE,
             )
             if match:
                 self.session.client_id = match.group(1)
 
             if not self.session.client_id:
                 raise UnexpectedException("Couldn't find clientId in app JS.")
+
+    def start_session(self, sess: WSAPISession | None = None):
+        if sess:
+            self.session.access_token = sess.access_token
+            self.session.wssdi = sess.wssdi
+            self.session.session_id = sess.session_id
+            self.session.client_id = sess.client_id
+            self.session.refresh_token = sess.refresh_token
+
+        if not self.session.wssdi or not self.session.client_id:
+            self._bootstrap_device_id_and_client()
 
         if not self.session.session_id:
             self.session.session_id = str(uuid.uuid4())
@@ -176,7 +222,15 @@ class WealthsimpleAPIBase:
             try:
                 self.search_security("XEQT")
             except WSApiException as e:
-                is_not_authorized = e.response is not None and (e.response.get("message") == "Not Authorized." or ('errors' in e.response and e.response.get('errors')[0].get("message") == "Not Authorized."))
+                errors = e.response.get("errors") if e.response is not None else None
+                first_error = errors[0] if isinstance(errors, list) and errors else None
+                is_not_authorized = e.response is not None and (
+                    e.response.get("message") == "Not Authorized."
+                    or (
+                        isinstance(first_error, dict)
+                        and first_error.get("message") == "Not Authorized."
+                    )
+                )
                 if not is_not_authorized:
                     raise
                 # Access token expired; try to refresh it below
