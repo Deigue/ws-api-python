@@ -63,6 +63,63 @@ def test_start_session_preserves_existing_session(api_with_session):
     assert api_with_session.session.wssdi == "test_wssdi"
 
 
+def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
+    """Dedicated test for the bootstrap logic (_bootstrap_device_id_and_client).
+
+    Verifies the preferred path using the cookie jar + JS bundle extraction.
+    The instance is created inside the patch so no real network calls occur.
+    """
+    with patch("ws_api.wealthsimple_api.requests.get") as mock_get:
+        login_resp = MagicMock()
+        login_resp.cookies = {"wssdi": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+        login_resp.text = (
+            '<html><head><script src="https://cdn.wealthsimple.com/app-1234abcd.js">'
+            "</script></head></html>"
+        )
+
+        js_resp = MagicMock()
+        # The current clientId regex requires a quoted "production" token.
+        js_resp.text = '"production"...,clientId:"fedcba9876543210fedcba9876543210"'
+
+        mock_get.side_effect = [login_resp, js_resp]
+
+        # Construct under the patch — constructor calls start_session()
+        api = WealthsimpleAPIBase()
+
+        assert api.session.wssdi == "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        assert api.session.client_id == "fedcba9876543210fedcba9876543210"
+        assert api.session.session_id is not None  # auto-generated
+
+        assert mock_get.call_count == 2
+        called_urls = [c[0][0] for c in mock_get.call_args_list]
+        assert called_urls[0] == "https://my.wealthsimple.com/app/login"
+        assert "app-1234abcd.js" in called_urls[1]
+
+
+def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
+    """Test the fallback parsing path when the cookie jar does not yield wssdi."""
+    with patch("ws_api.wealthsimple_api.requests.get") as mock_get:
+        login_resp = MagicMock()
+        login_resp.cookies = {}  # cookie jar misses it
+        login_resp.headers = {
+            "set-cookie": (
+                "wssdi=11111111-2222-3333-4444-555555555555; "
+                "Path=/; Domain=.wealthsimple.com"
+            )
+        }
+        login_resp.text = '<html><script src="https://cdn.wealthsimple.com/app-abcdef0123.js"></script>'
+
+        js_resp = MagicMock()
+        js_resp.text = '"production"...,clientId:"0123456789abcdef0123456789abcdef"'
+
+        mock_get.side_effect = [login_resp, js_resp]
+
+        api = WealthsimpleAPIBase()
+
+        assert api.session.wssdi == "11111111-2222-3333-4444-555555555555"
+        assert api.session.client_id == "0123456789abcdef0123456789abcdef"
+
+
 def test_check_oauth_token_refresh(api_base):
     """Test check_oauth_token refresh path."""
     api_base.session.refresh_token = "old_refresh"
