@@ -69,7 +69,7 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
     Verifies the preferred path using the cookie jar + JS bundle extraction.
     The instance is created inside the patch so no real network calls occur.
     """
-    with patch("ws_api.wealthsimple_api.requests.get") as mock_get:
+    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
         login_resp = MagicMock()
         login_resp.cookies = {"wssdi": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
         login_resp.text = (
@@ -81,7 +81,7 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
         # The current clientId regex requires a quoted "production" token.
         js_resp.text = '"production"...,clientId:"fedcba9876543210fedcba9876543210"'
 
-        mock_get.side_effect = [login_resp, js_resp]
+        mock_request.side_effect = [login_resp, js_resp]
 
         # Construct under the patch — constructor calls start_session()
         api = WealthsimpleAPIBase()
@@ -90,15 +90,16 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
         assert api.session.client_id == "fedcba9876543210fedcba9876543210"
         assert api.session.session_id is not None  # auto-generated
 
-        assert mock_get.call_count == 2
-        called_urls = [c[0][0] for c in mock_get.call_args_list]
-        assert called_urls[0] == "https://my.wealthsimple.com/app/login"
-        assert "app-1234abcd.js" in called_urls[1]
+        assert mock_request.call_count == 2
+        # calls are request(method, url, ...)
+        called = [(c[0][0], c[0][1]) for c in mock_request.call_args_list]
+        assert called[0] == ("GET", "https://my.wealthsimple.com/app/login")
+        assert "app-1234abcd.js" in called[1][1]
 
 
 def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
     """Test the fallback parsing path when the cookie jar does not yield wssdi."""
-    with patch("ws_api.wealthsimple_api.requests.get") as mock_get:
+    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
         login_resp = MagicMock()
         login_resp.cookies = {}  # cookie jar misses it
         login_resp.headers = {
@@ -112,12 +113,52 @@ def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
         js_resp = MagicMock()
         js_resp.text = '"production"...,clientId:"0123456789abcdef0123456789abcdef"'
 
-        mock_get.side_effect = [login_resp, js_resp]
+        mock_request.side_effect = [login_resp, js_resp]
 
         api = WealthsimpleAPIBase()
 
         assert api.session.wssdi == "11111111-2222-3333-4444-555555555555"
         assert api.session.client_id == "0123456789abcdef0123456789abcdef"
+
+
+def test_bootstrap_with_provided_incomplete_session():
+    """Regression test for bootstrap when a partial session (missing wssdi/client_id) is provided.
+
+    Ensures _bootstrap_device_id_and_client is invoked for the provided-session path,
+    populates the missing fields, preserves other tokens, and generates session_id.
+    """
+    sess = WSAPISession()
+    sess.access_token = "existing_access"
+    sess.refresh_token = "existing_refresh"
+    # deliberately omit wssdi, client_id, session_id
+
+    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+        login_resp = MagicMock()
+        login_resp.cookies = {"wssdi": "provided-sess-wssdi-abc123"}
+        login_resp.text = (
+            '<html><script src="https://cdn.wealthsimple.com/app-abc123def456.js"></script>'
+        )
+
+        js_resp = MagicMock()
+        js_resp.text = '"production"...,clientId:"9876543210fedcba9876543210fedcba"'
+
+        mock_request.side_effect = [login_resp, js_resp]
+
+        api = WealthsimpleAPIBase(sess)
+
+        # missing fields bootstrapped
+        assert api.session.wssdi == "provided-sess-wssdi-abc123"
+        assert api.session.client_id == "9876543210fedcba9876543210fedcba"
+        # other fields preserved
+        assert api.session.access_token == "existing_access"
+        assert api.session.refresh_token == "existing_refresh"
+        # session_id auto-generated since missing
+        assert api.session.session_id is not None
+
+        assert mock_request.call_count == 2
+        called = [(c[0][0], c[0][1]) for c in mock_request.call_args_list]
+        assert called[0][0] == "GET"
+        assert "app-abc123def456.js" in called[1][1]
 
 
 def test_check_oauth_token_refresh(api_base):

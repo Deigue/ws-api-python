@@ -51,6 +51,7 @@ class WealthsimpleAPIBase:
         data: dict | None = None,
         headers: dict | None = None,
         return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         headers = headers or {}
         if method == "POST":
@@ -73,6 +74,9 @@ class WealthsimpleAPIBase:
         try:
             response = requests.request(method, url, json=data, headers=headers)
 
+            if return_response:
+                return response
+
             if return_headers:
                 # Combine headers and body as a single string
                 response_headers = "\r\n".join(
@@ -85,10 +89,18 @@ class WealthsimpleAPIBase:
             raise CurlException(f"HTTP request failed: {e}")
 
     def send_get(
-        self, url: str, headers: dict | None = None, return_headers: bool = False
+        self,
+        url: str,
+        headers: dict | None = None,
+        return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         return self.send_http_request(
-            url, "GET", headers=headers, return_headers=return_headers
+            url,
+            "GET",
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
         )
 
     def send_post(
@@ -97,25 +109,34 @@ class WealthsimpleAPIBase:
         data: dict,
         headers: dict | None = None,
         return_headers: bool = False,
+        return_response: bool = False,
     ) -> Any:
         return self.send_http_request(
-            url, "POST", data=data, headers=headers, return_headers=return_headers
+            url,
+            "POST",
+            data=data,
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
         )
 
     def _bootstrap_device_id_and_client(self) -> None:
         """Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
         and client_id.
 
-        This was previously inline in start_session and used fragile header-string
-        scraping via the return_headers hack. It now prefers the requests cookie jar
-        (which correctly handles multiple Set-Cookie headers) with a narrow fallback
-        to the old parsing logic for unusual environments.
+        Uses send_http_request (with return_response) so that configured user_agent
+        is applied and network errors are consistently wrapped as CurlException.
+        Prefers the requests cookie jar (which correctly handles multiple Set-Cookie
+        headers) with a narrow fallback to the old parsing logic for unusual
+        environments.
         """
         app_js_url = None
 
         if not self.session.wssdi or not self.session.client_id:
-            # Fetch the login page using a direct request for reliable cookies + body.
-            resp = requests.get("https://my.wealthsimple.com/app/login")
+            # Fetch the login page via the wrapper for consistent headers + error handling.
+            resp = self.send_http_request(
+                "https://my.wealthsimple.com/app/login", method="GET", return_response=True
+            )
 
             # Preferred path: cookie jar (handles duplicates, path, domain, etc.)
             if not self.session.wssdi and "wssdi" in resp.cookies:
@@ -156,7 +177,9 @@ class WealthsimpleAPIBase:
                 )
 
             # Fetch the JS bundle to extract the production clientId.
-            js_resp = requests.get(app_js_url)
+            js_resp = self.send_http_request(
+                app_js_url, method="GET", return_response=True
+            )
 
             match = re.search(
                 r'"production"[^}]*clientId:"([a-f0-9]+)"',
