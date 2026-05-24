@@ -199,12 +199,13 @@ class WealthsimpleAPIBase:
             try:
                 self.search_security("XEQT")
             except WSApiException as e:
+                errors = e.response.get("errors") if e.response is not None else None
+                first_error = errors[0] if isinstance(errors, list) and errors else None
                 is_not_authorized = e.response is not None and (
                     e.response.get("message") == "Not Authorized."
                     or (
-                        "errors" in e.response
-                        and e.response.get("errors")[0].get("message")
-                        == "Not Authorized."
+                        isinstance(first_error, dict)
+                        and first_error.get("message") == "Not Authorized."
                     )
                 )
                 if not is_not_authorized:
