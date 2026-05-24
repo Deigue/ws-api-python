@@ -176,7 +176,6 @@ class WealthsimpleAPIBase:
             self.session.session_id = sess.session_id
             self.session.client_id = sess.client_id
             self.session.refresh_token = sess.refresh_token
-            return
 
         if not self.session.wssdi or not self.session.client_id:
             self._bootstrap_device_id_and_client()
