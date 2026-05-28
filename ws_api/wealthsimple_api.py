@@ -461,7 +461,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
 
     @staticmethod
     def _iso_z(dt: datetime | None) -> str | None:
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if dt else None
+        return dt.strftime("%Y-%m-%d") if dt else None
 
     def get_accounts(self, open_only=True, use_cache=True):
         cache_key = "open" if open_only else "all"
