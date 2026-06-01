@@ -690,6 +690,28 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
 
         return value
 
+    def get_security_dividend_details(self, security_id: str, currency: str = None):
+        """Fetch a security's declared dividend events using GraphQL query.
+
+        Returns the security's `events` (each with `exDividendDate`,
+        `payableDate` and `recordDate`), along with its `yield` and
+        `dividendFrequency`. Note that `events` is an empty list until the
+        issuer announces the next dividend.
+
+        Args:
+            security_id (str): The security ID to fetch dividend details for.
+            currency (str, optional): Currency for the `yield` figure.
+        """
+        variables = {"securityId": security_id}
+        if currency is not None:
+            variables["currency"] = currency
+        return self.do_graphql_query(
+            "FetchSecurityDividendDetails",
+            variables,
+            "security",
+            "object",
+        )
+
     def get_security_historical_quotes(self, security_id, time_range="1m"):
         """Fetch historical quotes for a security using GraphQL query.
 
