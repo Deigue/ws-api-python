@@ -690,7 +690,7 @@ class WealthsimpleAPI(WealthsimpleAPIBase):
 
         return value
 
-    def get_security_dividend_details(self, security_id: str, currency: str = None):
+    def get_security_dividend_details(self, security_id: str, currency: str | None = None):
         """Fetch a security's declared dividend events using GraphQL query.
 
         Returns the security's `events` (each with `exDividendDate`,
