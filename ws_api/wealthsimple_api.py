@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from inspect import signature
 from typing import Any
 
-import requests
+from curl_cffi import requests
+from curl_cffi.requests.exceptions import RequestException
 
 from ws_api.exceptions import (
     CurlException,
@@ -28,13 +29,14 @@ class WealthsimpleAPIBase:
     GRAPHQL_URL = "https://my.wealthsimple.com/graphql"
     GRAPHQL_VERSION = "12"
 
+    user_agent: str | None = None
+
     def __init__(self, sess: WSAPISession | None = None):
         self.security_market_data_cache_getter = None
         self.security_market_data_cache_setter = None
         self.session = WSAPISession()
+        self.http = requests.Session()
         self.start_session(sess)
-
-    user_agent: str | None = None
 
     @staticmethod
     def set_user_agent(user_agent: str) -> None:
@@ -44,88 +46,9 @@ class WealthsimpleAPIBase:
     def uuidv4() -> str:
         return str(uuid.uuid4())
 
-    def send_http_request(
-        self,
-        url: str,
-        method: str = "POST",
-        data: dict | None = None,
-        headers: dict | None = None,
-        return_headers: bool = False,
-        return_response: bool = False,
-    ) -> Any:
-        headers = headers or {}
-        if method == "POST":
-            headers["Content-Type"] = "application/json"
-
-        if self.session.session_id:
-            headers["x-ws-session-id"] = self.session.session_id
-
-        if self.session.access_token and (
-            not data or data.get("grant_type") != "refresh_token"
-        ):
-            headers["Authorization"] = f"Bearer {self.session.access_token}"
-
-        if self.session.wssdi:
-            headers["x-ws-device-id"] = self.session.wssdi
-
-        if WealthsimpleAPI.user_agent:
-            headers["User-Agent"] = WealthsimpleAPI.user_agent
-
-        try:
-            response = requests.request(method, url, json=data, headers=headers)
-
-            if return_response:
-                return response
-
-            if return_headers:
-                # Combine headers and body as a single string
-                response_headers = "\r\n".join(
-                    f"{k}: {v}" for k, v in response.headers.items()
-                )
-                return f"{response_headers}\r\n\r\n{response.text}"
-
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            raise CurlException(f"HTTP request failed: {e}")
-
-    def send_get(
-        self,
-        url: str,
-        headers: dict | None = None,
-        return_headers: bool = False,
-        return_response: bool = False,
-    ) -> Any:
-        return self.send_http_request(
-            url,
-            "GET",
-            headers=headers,
-            return_headers=return_headers,
-            return_response=return_response,
-        )
-
-    def send_post(
-        self,
-        url: str,
-        data: dict,
-        headers: dict | None = None,
-        return_headers: bool = False,
-        return_response: bool = False,
-    ) -> Any:
-        return self.send_http_request(
-            url,
-            "POST",
-            data=data,
-            headers=headers,
-            return_headers=return_headers,
-            return_response=return_response,
-        )
-
     def _bootstrap_device_id_and_client(self) -> None:
         """Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
         and client_id.
-
-        Uses send_http_request (with return_response) so that configured user_agent
-        is applied and network errors are consistently wrapped as CurlException.
         Prefers the requests cookie jar (which correctly handles multiple Set-Cookie
         headers) with a narrow fallback to the old parsing logic for unusual
         environments.
@@ -134,9 +57,16 @@ class WealthsimpleAPIBase:
 
         if not self.session.wssdi or not self.session.client_id:
             # Fetch the login page via the wrapper for consistent headers + error handling.
-            resp = self.send_http_request(
-                "https://my.wealthsimple.com/app/login", method="GET", return_response=True
-            )
+            try:
+                headers = {}
+                if WealthsimpleAPI.user_agent:
+                    headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+                resp = self.http.get(
+                    "https://my.wealthsimple.com/app/login", headers=headers
+                )
+            except RequestException as e:
+                raise CurlException(f"HTTP request failed: {e}")
 
             # Preferred path: cookie jar (handles duplicates, path, domain, etc.)
             if not self.session.wssdi and "wssdi" in resp.cookies:
@@ -176,10 +106,14 @@ class WealthsimpleAPIBase:
                     "Couldn't find app JS URL in login page response body."
                 )
 
-            # Fetch the JS bundle to extract the production clientId.
-            js_resp = self.send_http_request(
-                app_js_url, method="GET", return_response=True
-            )
+            try:
+                headers = {}
+                if WealthsimpleAPI.user_agent:
+                    headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+                js_resp = self.http.get(app_js_url, headers=headers)
+            except RequestException as e:
+                raise CurlException(f"HTTP request failed: {e}")
 
             match = re.search(
                 r'"production"[^}]*clientId:"([a-f0-9]+)"',
@@ -244,10 +178,24 @@ class WealthsimpleAPIBase:
                 "client_id": self.session.client_id,
             }
             headers = {
+                "Content-Type": "application/json",
                 "x-wealthsimple-client": "@wealthsimple/wealthsimple",
                 "x-ws-profile": "invest",
             }
-            response = self.send_post(f"{self.OAUTH_BASE_URL}/token", data, headers)
+            if self.session.session_id:
+                headers["x-ws-session-id"] = self.session.session_id
+            if self.session.wssdi:
+                headers["x-ws-device-id"] = self.session.wssdi
+            if WealthsimpleAPI.user_agent:
+                headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+            try:
+                response = self.http.post(
+                    f"{self.OAUTH_BASE_URL}/token", json=data, headers=headers
+                ).json()
+            except RequestException as e:
+                raise CurlException(f"HTTP request failed: {e}")
+
             if "access_token" not in response or "refresh_token" not in response:
                 raise ManualLoginRequired(
                     f"OAuth token invalid and cannot be refreshed: {response.get('error', 'Invalid response from API')}"
@@ -287,17 +235,30 @@ class WealthsimpleAPIBase:
         }
 
         headers = {
+            "Content-Type": "application/json",
             "x-wealthsimple-client": "@wealthsimple/wealthsimple",
             "x-ws-profile": "undefined",
         }
+
+        if self.session.session_id:
+            headers["x-ws-session-id"] = self.session.session_id
+
+        if self.session.wssdi:
+            headers["x-ws-device-id"] = self.session.wssdi
+
+        if WealthsimpleAPI.user_agent:
+            headers["User-Agent"] = WealthsimpleAPI.user_agent
 
         if otp_answer:
             headers["x-wealthsimple-otp"] = f"{otp_answer};remember=true"
 
         # Send the POST request for token
-        response_data = self.send_post(
-            url=f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
-        )
+        try:
+            response_data = self.http.post(
+                f"{self.OAUTH_BASE_URL}/token", json=data, headers=headers
+            ).json()
+        except RequestException as e:
+            raise CurlException(f"HTTP request failed: {e}")
 
         if (
             "error" in response_data
@@ -339,15 +300,31 @@ class WealthsimpleAPIBase:
         }
 
         headers = {
+            "Content-Type": "application/json",
             "x-ws-profile": "trade",
             "x-ws-api-version": self.GRAPHQL_VERSION,
             "x-ws-locale": "en-CA",
             "x-platform-os": "web",
         }
 
-        response_data = self.send_post(
-            url=self.GRAPHQL_URL, data=query, headers=headers
-        )
+        if self.session.session_id:
+            headers["x-ws-session-id"] = self.session.session_id
+
+        if self.session.access_token:
+            headers["Authorization"] = f"Bearer {self.session.access_token}"
+
+        if self.session.wssdi:
+            headers["x-ws-device-id"] = self.session.wssdi
+
+        if WealthsimpleAPI.user_agent:
+            headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+        try:
+            response_data = self.http.post(
+                self.GRAPHQL_URL, json=query, headers=headers
+            ).json()
+        except RequestException as e:
+            raise CurlException(f"HTTP request failed: {e}")
 
         if "data" not in response_data:
             raise WSApiException(f"GraphQL query failed: {query_name}", response_data)
@@ -408,9 +385,26 @@ class WealthsimpleAPIBase:
     def get_token_info(self):
         if not self.session.token_info:
             headers = {"x-wealthsimple-client": "@wealthsimple/wealthsimple"}
-            response = self.send_get(
-                self.OAUTH_BASE_URL + "/token/info", headers=headers
-            )
+
+            if self.session.session_id:
+                headers["x-ws-session-id"] = self.session.session_id
+
+            if self.session.access_token:
+                headers["Authorization"] = f"Bearer {self.session.access_token}"
+
+            if self.session.wssdi:
+                headers["x-ws-device-id"] = self.session.wssdi
+
+            if WealthsimpleAPI.user_agent:
+                headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+            try:
+                response = self.http.get(
+                    self.OAUTH_BASE_URL + "/token/info", headers=headers
+                ).json()
+            except RequestException as e:
+                raise CurlException(f"HTTP request failed: {e}")
+
             self.session.token_info = response
         return self.session.token_info
 
