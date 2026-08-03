@@ -138,8 +138,8 @@ class WealthsimpleAPIBase:
                 if WealthsimpleAPI.user_agent:
                     headers["User-Agent"] = WealthsimpleAPI.user_agent
 
-                resp = self.http.get(
-                    "https://my.wealthsimple.com/app/login", headers=headers
+                resp = self.send_get(
+                    "https://my.wealthsimple.com/app/login", headers=headers, return_response=True
                 )
             except RequestException as e:
                 raise CurlException(f"HTTP request failed: {e}")
@@ -187,7 +187,7 @@ class WealthsimpleAPIBase:
                 if WealthsimpleAPI.user_agent:
                     headers["User-Agent"] = WealthsimpleAPI.user_agent
 
-                js_resp = self.http.get(app_js_url, headers=headers)
+                js_resp = self.send_get(app_js_url, headers=headers, return_response=True)
             except RequestException as e:
                 raise CurlException(f"HTTP request failed: {e}")
 
@@ -266,9 +266,9 @@ class WealthsimpleAPIBase:
                 headers["User-Agent"] = WealthsimpleAPI.user_agent
 
             try:
-                response = self.http.post(
-                    f"{self.OAUTH_BASE_URL}/token", json=data, headers=headers
-                ).json()
+                response = self.send_post(
+                    f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
+                )
             except RequestException as e:
                 raise CurlException(f"HTTP request failed: {e}")
 
@@ -330,9 +330,9 @@ class WealthsimpleAPIBase:
 
         # Send the POST request for token
         try:
-            response_data = self.http.post(
-                f"{self.OAUTH_BASE_URL}/token", json=data, headers=headers
-            ).json()
+            response_data = self.send_post(
+                f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
+            )
         except RequestException as e:
             raise CurlException(f"HTTP request failed: {e}")
 
@@ -396,9 +396,9 @@ class WealthsimpleAPIBase:
             headers["User-Agent"] = WealthsimpleAPI.user_agent
 
         try:
-            response_data = self.http.post(
-                self.GRAPHQL_URL, json=query, headers=headers
-            ).json()
+            response_data = self.send_post(
+                self.GRAPHQL_URL, data=query, headers=headers
+            )
         except RequestException as e:
             raise CurlException(f"HTTP request failed: {e}")
 
@@ -475,9 +475,9 @@ class WealthsimpleAPIBase:
                 headers["User-Agent"] = WealthsimpleAPI.user_agent
 
             try:
-                response = self.http.get(
+                response = self.send_get(
                     self.OAUTH_BASE_URL + "/token/info", headers=headers
-                ).json()
+                )
             except RequestException as e:
                 raise CurlException(f"HTTP request failed: {e}")
 
