@@ -129,6 +129,9 @@ class WealthsimpleAPIBase:
     def _bootstrap_device_id_and_client(self) -> None:
         """Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
         and client_id.
+
+        Uses send_http_request (with return_response) so that configured user_agent
+        is applied and network errors are consistently wrapped as CurlException.
         Prefers the requests cookie jar (which correctly handles multiple Set-Cookie
         headers) with a narrow fallback to the old parsing logic for unusual
         environments.
@@ -258,16 +261,9 @@ class WealthsimpleAPIBase:
                 "client_id": self.session.client_id,
             }
             headers = {
-                "Content-Type": "application/json",
                 "x-wealthsimple-client": "@wealthsimple/wealthsimple",
                 "x-ws-profile": "invest",
             }
-            if self.session.session_id:
-                headers["x-ws-session-id"] = self.session.session_id
-            if self.session.wssdi:
-                headers["x-ws-device-id"] = self.session.wssdi
-            if WealthsimpleAPI.user_agent:
-                headers["User-Agent"] = WealthsimpleAPI.user_agent
 
             try:
                 response = self.send_post(
@@ -315,19 +311,9 @@ class WealthsimpleAPIBase:
         }
 
         headers = {
-            "Content-Type": "application/json",
             "x-wealthsimple-client": "@wealthsimple/wealthsimple",
             "x-ws-profile": "undefined",
         }
-
-        if self.session.session_id:
-            headers["x-ws-session-id"] = self.session.session_id
-
-        if self.session.wssdi:
-            headers["x-ws-device-id"] = self.session.wssdi
-
-        if WealthsimpleAPI.user_agent:
-            headers["User-Agent"] = WealthsimpleAPI.user_agent
 
         if otp_answer:
             headers["x-wealthsimple-otp"] = f"{otp_answer};remember=true"
@@ -380,24 +366,11 @@ class WealthsimpleAPIBase:
         }
 
         headers = {
-            "Content-Type": "application/json",
             "x-ws-profile": "trade",
             "x-ws-api-version": self.GRAPHQL_VERSION,
             "x-ws-locale": "en-CA",
             "x-platform-os": "web",
         }
-
-        if self.session.session_id:
-            headers["x-ws-session-id"] = self.session.session_id
-
-        if self.session.access_token:
-            headers["Authorization"] = f"******"
-
-        if self.session.wssdi:
-            headers["x-ws-device-id"] = self.session.wssdi
-
-        if WealthsimpleAPI.user_agent:
-            headers["User-Agent"] = WealthsimpleAPI.user_agent
 
         try:
             response_data = self.send_post(
@@ -465,18 +438,6 @@ class WealthsimpleAPIBase:
     def get_token_info(self):
         if not self.session.token_info:
             headers = {"x-wealthsimple-client": "@wealthsimple/wealthsimple"}
-
-            if self.session.session_id:
-                headers["x-ws-session-id"] = self.session.session_id
-
-            if self.session.access_token:
-                headers["Authorization"] = f"******"
-
-            if self.session.wssdi:
-                headers["x-ws-device-id"] = self.session.wssdi
-
-            if WealthsimpleAPI.user_agent:
-                headers["User-Agent"] = WealthsimpleAPI.user_agent
 
             try:
                 response = self.send_get(
