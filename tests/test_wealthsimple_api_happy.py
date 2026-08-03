@@ -10,7 +10,10 @@ from ws_api.wealthsimple_api import WealthsimpleAPI, WealthsimpleAPIBase
 
 @pytest.fixture
 def api_base():
-    return WealthsimpleAPIBase()
+    sess = WSAPISession()
+    sess.client_id = "test_client_id"
+    sess.wssdi = "test_wssdi"
+    return WealthsimpleAPIBase(sess)
 
 
 @pytest.fixture
@@ -24,7 +27,10 @@ def api_with_session():
 
 @pytest.fixture
 def api():
-    return WealthsimpleAPI()
+    sess = WSAPISession()
+    sess.client_id = "test_client_id"
+    sess.wssdi = "test_wssdi"
+    return WealthsimpleAPI(sess)
 
 
 def test_send_http_request_return_headers(api_base):
@@ -69,7 +75,10 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
     Verifies the preferred path using the cookie jar + JS bundle extraction.
     The instance is created inside the patch so no real network calls occur.
     """
-    with patch("curl_cffi.requests.Session.get") as mock_request:
+    with patch("curl_cffi.requests.Session") as MockSession:
+        mock_session_instance = MagicMock()
+        MockSession.return_value = mock_session_instance
+         
         login_resp = MagicMock()
         login_resp.cookies = {"wssdi": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
         login_resp.text = (
@@ -81,7 +90,7 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
         # The current clientId regex requires a quoted "production" token.
         js_resp.text = '"production"...,clientId:"fedcba9876543210fedcba9876543210"'
 
-        mock_request.side_effect = [login_resp, js_resp]
+        mock_session_instance.request.side_effect = [login_resp, js_resp]
 
         # Construct under the patch — constructor calls start_session()
         api = WealthsimpleAPIBase()
@@ -90,16 +99,19 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
         assert api.session.client_id == "fedcba9876543210fedcba9876543210"
         assert api.session.session_id is not None  # auto-generated
 
-        assert mock_request.call_count == 2
-        # calls are request(method, url, ...)
-        called = [(c[0][0], c[0][1]) for c in mock_request.call_args_list]
+        assert mock_session_instance.request.call_count == 2
+        # calls are request(method=..., url=...)
+        called = [(c.kwargs['method'], c.kwargs['url']) for c in mock_session_instance.request.call_args_list]
         assert called[0] == ("GET", "https://my.wealthsimple.com/app/login")
         assert "app-1234abcd.js" in called[1][1]
 
 
 def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
     """Test the fallback parsing path when the cookie jar does not yield wssdi."""
-    with patch("curl_cffi.requests.Session.get") as mock_request:
+    with patch("curl_cffi.requests.Session") as MockSession:
+        mock_session_instance = MagicMock()
+        MockSession.return_value = mock_session_instance
+         
         login_resp = MagicMock()
         login_resp.cookies = {}  # cookie jar misses it
         login_resp.headers = {
@@ -113,7 +125,7 @@ def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
         js_resp = MagicMock()
         js_resp.text = '"production"...,clientId:"0123456789abcdef0123456789abcdef"'
 
-        mock_request.side_effect = [login_resp, js_resp]
+        mock_session_instance.request.side_effect = [login_resp, js_resp]
 
         api = WealthsimpleAPIBase()
 
@@ -132,7 +144,10 @@ def test_bootstrap_with_provided_incomplete_session():
     sess.refresh_token = "existing_refresh"
     # deliberately omit wssdi, client_id, session_id
 
-    with patch("curl_cffi.requests.Session.get") as mock_request:
+    with patch("curl_cffi.requests.Session") as MockSession:
+        mock_session_instance = MagicMock()
+        MockSession.return_value = mock_session_instance
+         
         login_resp = MagicMock()
         login_resp.cookies = {"wssdi": "provided-sess-wssdi-abc123"}
         login_resp.text = (
@@ -142,7 +157,7 @@ def test_bootstrap_with_provided_incomplete_session():
         js_resp = MagicMock()
         js_resp.text = '"production"...,clientId:"9876543210fedcba9876543210fedcba"'
 
-        mock_request.side_effect = [login_resp, js_resp]
+        mock_session_instance.request.side_effect = [login_resp, js_resp]
 
         api = WealthsimpleAPIBase(sess)
 
@@ -155,8 +170,8 @@ def test_bootstrap_with_provided_incomplete_session():
         # session_id auto-generated since missing
         assert api.session.session_id is not None
 
-        assert mock_request.call_count == 2
-        called = [(c[0][0], c[0][1]) for c in mock_request.call_args_list]
+        assert mock_session_instance.request.call_count == 2
+        called = [(c.kwargs['method'], c.kwargs['url']) for c in mock_session_instance.request.call_args_list]
         assert called[0][0] == "GET"
         assert "app-abc123def456.js" in called[1][1]
 

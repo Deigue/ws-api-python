@@ -74,7 +74,11 @@ class WealthsimpleAPIBase:
             headers["User-Agent"] = WealthsimpleAPI.user_agent
 
         try:
-            response = self.http.request(method, url, json=data, headers=headers)
+            # For POST requests with data, pass data as json parameter
+            if data and method == "POST":
+                response = self.http.request(method=method, url=url, json=data, headers=headers)
+            else:
+                response = self.http.request(method=method, url=url, headers=headers)
 
             if return_response:
                 return response

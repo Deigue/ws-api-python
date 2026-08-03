@@ -57,8 +57,8 @@ def test_send_http_request_post(mock_request, mock_session):
 
     mock_request.assert_called_once()
     args, kwargs = mock_request.call_args
-    assert args[0] == "POST"
-    assert args[1] == "https://test.example.com/api"
+    assert kwargs["method"] == "POST"
+    assert kwargs["url"] == "https://test.example.com/api"
     assert kwargs["json"] == {
         "grant_type": "password",
         "username": "test",
@@ -85,8 +85,8 @@ def test_send_get_request(mock_request, mock_session):
 
     mock_request.assert_called_once()
     args, kwargs = mock_request.call_args
-    assert args[0] == "GET"
-    assert args[1] == "https://test.example.com/get"
+    assert kwargs["method"] == "GET"
+    assert kwargs["url"] == "https://test.example.com/get"
     headers = kwargs["headers"]
     assert "x-ws-session-id" in headers
     assert headers["x-ws-session-id"] == "test_session_id"
