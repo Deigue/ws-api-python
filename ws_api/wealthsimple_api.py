@@ -46,6 +46,82 @@ class WealthsimpleAPIBase:
     def uuidv4() -> str:
         return str(uuid.uuid4())
 
+    def send_http_request(
+        self,
+        url: str,
+        method: str = "POST",
+        data: dict | None = None,
+        headers: dict | None = None,
+        return_headers: bool = False,
+        return_response: bool = False,
+    ) -> Any:
+        headers = headers or {}
+        if method == "POST":
+            headers["Content-Type"] = "application/json"
+
+        if self.session.session_id:
+            headers["x-ws-session-id"] = self.session.session_id
+
+        if self.session.access_token and (
+            not data or data.get("grant_type") != "refresh_token"
+        ):
+            headers["Authorization"] = f"Bearer {self.session.access_token}"
+
+        if self.session.wssdi:
+            headers["x-ws-device-id"] = self.session.wssdi
+
+        if WealthsimpleAPI.user_agent:
+            headers["User-Agent"] = WealthsimpleAPI.user_agent
+
+        try:
+            response = self.http.request(method, url, json=data, headers=headers)
+
+            if return_response:
+                return response
+
+            if return_headers:
+                # Combine headers and body as a single string
+                response_headers = "\r\n".join(
+                    f"{k}: {v}" for k, v in response.headers.items()
+                )
+                return f"{response_headers}\r\n\r\n{response.text}"
+
+            return response.json()
+        except RequestException as e:
+            raise CurlException(f"HTTP request failed: {e}")
+
+    def send_get(
+        self,
+        url: str,
+        headers: dict | None = None,
+        return_headers: bool = False,
+        return_response: bool = False,
+    ) -> Any:
+        return self.send_http_request(
+            url,
+            "GET",
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
+        )
+
+    def send_post(
+        self,
+        url: str,
+        data: dict,
+        headers: dict | None = None,
+        return_headers: bool = False,
+        return_response: bool = False,
+    ) -> Any:
+        return self.send_http_request(
+            url,
+            "POST",
+            data=data,
+            headers=headers,
+            return_headers=return_headers,
+            return_response=return_response,
+        )
+
     def _bootstrap_device_id_and_client(self) -> None:
         """Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
         and client_id.
@@ -311,7 +387,7 @@ class WealthsimpleAPIBase:
             headers["x-ws-session-id"] = self.session.session_id
 
         if self.session.access_token:
-            headers["Authorization"] = f"Bearer {self.session.access_token}"
+            headers["Authorization"] = f"******"
 
         if self.session.wssdi:
             headers["x-ws-device-id"] = self.session.wssdi
@@ -390,7 +466,7 @@ class WealthsimpleAPIBase:
                 headers["x-ws-session-id"] = self.session.session_id
 
             if self.session.access_token:
-                headers["Authorization"] = f"Bearer {self.session.access_token}"
+                headers["Authorization"] = f"******"
 
             if self.session.wssdi:
                 headers["x-ws-device-id"] = self.session.wssdi

@@ -29,7 +29,7 @@ def api():
 
 def test_send_http_request_return_headers(api_base):
     """Test send_http_request with return_headers=True path."""
-    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+    with patch("curl_cffi.requests.Session.request") as mock_request:
         mock_resp = MagicMock()
         mock_resp.headers = {"Set-Cookie": "wssdi=test; path=/"}
         mock_resp.text = "response body"
@@ -45,7 +45,7 @@ def test_send_http_request_return_headers(api_base):
 
 def test_send_post(api_base):
     """Test send_post delegation."""
-    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+    with patch("curl_cffi.requests.Session.request") as mock_request:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"ok": True}
         mock_request.return_value = mock_resp
@@ -69,7 +69,7 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
     Verifies the preferred path using the cookie jar + JS bundle extraction.
     The instance is created inside the patch so no real network calls occur.
     """
-    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+    with patch("curl_cffi.requests.Session.get") as mock_request:
         login_resp = MagicMock()
         login_resp.cookies = {"wssdi": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
         login_resp.text = (
@@ -99,7 +99,7 @@ def test_bootstrap_device_id_and_client_prefers_cookie_jar(api_base):
 
 def test_bootstrap_device_id_falls_back_to_header_parsing(api_base):
     """Test the fallback parsing path when the cookie jar does not yield wssdi."""
-    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+    with patch("curl_cffi.requests.Session.get") as mock_request:
         login_resp = MagicMock()
         login_resp.cookies = {}  # cookie jar misses it
         login_resp.headers = {
@@ -132,7 +132,7 @@ def test_bootstrap_with_provided_incomplete_session():
     sess.refresh_token = "existing_refresh"
     # deliberately omit wssdi, client_id, session_id
 
-    with patch("ws_api.wealthsimple_api.requests.request") as mock_request:
+    with patch("curl_cffi.requests.Session.get") as mock_request:
         login_resp = MagicMock()
         login_resp.cookies = {"wssdi": "provided-sess-wssdi-abc123"}
         login_resp.text = (

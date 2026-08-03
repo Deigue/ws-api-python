@@ -39,7 +39,7 @@ def test_wealthsimple_api_init_with_session(mock_session):
     assert api.session.wssdi == "test_wssdi"
 
 
-@patch("requests.request")
+@patch("curl_cffi.requests.Session.request")
 def test_send_http_request_post(mock_request, mock_session):
     mock_resp = MagicMock()
     mock_resp.json.return_value = {"status": "ok"}
@@ -71,7 +71,7 @@ def test_send_http_request_post(mock_request, mock_session):
     assert headers["x-ws-device-id"] == "test_wssdi"
 
 
-@patch("requests.request")
+@patch("curl_cffi.requests.Session.request")
 def test_send_get_request(mock_request, mock_session):
     mock_resp = MagicMock()
     mock_resp.json.return_value = {"status": "ok"}
