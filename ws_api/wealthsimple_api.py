@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from inspect import signature
 from typing import Any
 
-import requests
+from curl_cffi import requests
+from curl_cffi.requests.exceptions import RequestException
 
 from ws_api.exceptions import (
     CurlException,
@@ -32,6 +33,7 @@ class WealthsimpleAPIBase:
         self.security_market_data_cache_getter = None
         self.security_market_data_cache_setter = None
         self.session = WSAPISession()
+        self.http = requests.Session()
         self.start_session(sess)
 
     user_agent: str | None = None
@@ -85,7 +87,7 @@ class WealthsimpleAPIBase:
                 return f"{response_headers}\r\n\r\n{response.text}"
 
             return response.json()
-        except requests.exceptions.RequestException as e:
+        except RequestException as e:
             raise CurlException(f"HTTP request failed: {e}")
 
     def send_get(
@@ -134,8 +136,8 @@ class WealthsimpleAPIBase:
 
         if not self.session.wssdi or not self.session.client_id:
             # Fetch the login page via the wrapper for consistent headers + error handling.
-            resp = self.send_http_request(
-                "https://my.wealthsimple.com/app/login", method="GET", return_response=True
+            resp = self.send_get(
+                "https://my.wealthsimple.com/app/login", return_response=True
             )
 
             # Preferred path: cookie jar (handles duplicates, path, domain, etc.)
@@ -177,8 +179,8 @@ class WealthsimpleAPIBase:
                 )
 
             # Fetch the JS bundle to extract the production clientId.
-            js_resp = self.send_http_request(
-                app_js_url, method="GET", return_response=True
+            js_resp = self.send_get(
+                app_js_url, return_response=True
             )
 
             match = re.search(
