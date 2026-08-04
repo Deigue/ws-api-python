@@ -136,16 +136,9 @@ class WealthsimpleAPIBase:
 
         if not self.session.wssdi or not self.session.client_id:
             # Fetch the login page via the wrapper for consistent headers + error handling.
-            try:
-                headers = {}
-                if WealthsimpleAPI.user_agent:
-                    headers["User-Agent"] = WealthsimpleAPI.user_agent
-
-                resp = self.send_get(
-                    "https://my.wealthsimple.com/app/login", headers=headers, return_response=True
-                )
-            except RequestException as e:
-                raise CurlException(f"HTTP request failed: {e}")
+            resp = self.send_get(
+                "https://my.wealthsimple.com/app/login", return_response=True
+            )
 
             # Preferred path: cookie jar (handles duplicates, path, domain, etc.)
             if not self.session.wssdi and "wssdi" in resp.cookies:
@@ -185,14 +178,7 @@ class WealthsimpleAPIBase:
                     "Couldn't find app JS URL in login page response body."
                 )
 
-            try:
-                headers = {}
-                if WealthsimpleAPI.user_agent:
-                    headers["User-Agent"] = WealthsimpleAPI.user_agent
-
-                js_resp = self.send_get(app_js_url, headers=headers, return_response=True)
-            except RequestException as e:
-                raise CurlException(f"HTTP request failed: {e}")
+            js_resp = self.send_get(app_js_url, return_response=True)
 
             match = re.search(
                 r'"production"[^}]*clientId:"([a-f0-9]+)"',
@@ -261,12 +247,9 @@ class WealthsimpleAPIBase:
                 "x-ws-profile": "invest",
             }
 
-            try:
-                response = self.send_post(
-                    f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
-                )
-            except RequestException as e:
-                raise CurlException(f"HTTP request failed: {e}")
+            response = self.send_post(
+                f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
+            )
 
             if "access_token" not in response or "refresh_token" not in response:
                 raise ManualLoginRequired(
@@ -315,12 +298,9 @@ class WealthsimpleAPIBase:
             headers["x-wealthsimple-otp"] = f"{otp_answer};remember=true"
 
         # Send the POST request for token
-        try:
-            response_data = self.send_post(
-                f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
-            )
-        except RequestException as e:
-            raise CurlException(f"HTTP request failed: {e}")
+        response_data = self.send_post(
+            f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
+        )
 
         if (
             "error" in response_data
@@ -368,12 +348,9 @@ class WealthsimpleAPIBase:
             "x-platform-os": "web",
         }
 
-        try:
-            response_data = self.send_post(
-                self.GRAPHQL_URL, data=query, headers=headers
-            )
-        except RequestException as e:
-            raise CurlException(f"HTTP request failed: {e}")
+        response_data = self.send_post(
+            self.GRAPHQL_URL, data=query, headers=headers
+        )
 
         if "data" not in response_data:
             raise WSApiException(f"GraphQL query failed: {query_name}", response_data)
@@ -435,12 +412,9 @@ class WealthsimpleAPIBase:
         if not self.session.token_info:
             headers = {"x-wealthsimple-client": "@wealthsimple/wealthsimple"}
 
-            try:
-                response = self.send_get(
-                    self.OAUTH_BASE_URL + "/token/info", headers=headers
-                )
-            except RequestException as e:
-                raise CurlException(f"HTTP request failed: {e}")
+            response = self.send_get(
+                self.OAUTH_BASE_URL + "/token/info", headers=headers
+            )
 
             self.session.token_info = response
         return self.session.token_info
