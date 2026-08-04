@@ -29,14 +29,14 @@ class WealthsimpleAPIBase:
     GRAPHQL_URL = "https://my.wealthsimple.com/graphql"
     GRAPHQL_VERSION = "12"
 
-    user_agent: str | None = None
-
     def __init__(self, sess: WSAPISession | None = None):
         self.security_market_data_cache_getter = None
         self.security_market_data_cache_setter = None
         self.session = WSAPISession()
         self.http = requests.Session()
         self.start_session(sess)
+
+    user_agent: str | None = None
 
     @staticmethod
     def set_user_agent(user_agent: str) -> None:
@@ -178,7 +178,10 @@ class WealthsimpleAPIBase:
                     "Couldn't find app JS URL in login page response body."
                 )
 
-            js_resp = self.send_get(app_js_url, return_response=True)
+            # Fetch the JS bundle to extract the production clientId.
+            js_resp = self.send_get(
+                app_js_url, return_response=True
+            )
 
             match = re.search(
                 r'"production"[^}]*clientId:"([a-f0-9]+)"',
@@ -246,11 +249,7 @@ class WealthsimpleAPIBase:
                 "x-wealthsimple-client": "@wealthsimple/wealthsimple",
                 "x-ws-profile": "invest",
             }
-
-            response = self.send_post(
-                f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
-            )
-
+            response = self.send_post(f"{self.OAUTH_BASE_URL}/token", data, headers)
             if "access_token" not in response or "refresh_token" not in response:
                 raise ManualLoginRequired(
                     f"OAuth token invalid and cannot be refreshed: {response.get('error', 'Invalid response from API')}"
@@ -299,7 +298,7 @@ class WealthsimpleAPIBase:
 
         # Send the POST request for token
         response_data = self.send_post(
-            f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
+            url=f"{self.OAUTH_BASE_URL}/token", data=data, headers=headers
         )
 
         if (
@@ -349,7 +348,7 @@ class WealthsimpleAPIBase:
         }
 
         response_data = self.send_post(
-            self.GRAPHQL_URL, data=query, headers=headers
+            url=self.GRAPHQL_URL, data=query, headers=headers
         )
 
         if "data" not in response_data:
@@ -411,11 +410,9 @@ class WealthsimpleAPIBase:
     def get_token_info(self):
         if not self.session.token_info:
             headers = {"x-wealthsimple-client": "@wealthsimple/wealthsimple"}
-
             response = self.send_get(
                 self.OAUTH_BASE_URL + "/token/info", headers=headers
             )
-
             self.session.token_info = response
         return self.session.token_info
 
