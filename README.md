@@ -27,6 +27,12 @@ uv add ws-api
 pip install ws-api
 ```
 
+Upgrading
+---------
+
+If you are updating from 0.35 or less, to 0.36 or more, the `requests` dependency has been replaced with `curl_cffi`.  
+If you installed using `uv` or `pip` (and you update using either), they will take care of that for you.
+
 ### Basic Example
 
 ```python
